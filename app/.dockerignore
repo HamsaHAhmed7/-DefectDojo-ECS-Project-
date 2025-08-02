@@ -1,1 +1,13 @@
-.dockerignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.env
+.env
+.git
+.gitignore
+Dockerfile
+*.md
+tests
