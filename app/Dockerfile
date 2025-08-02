@@ -1,38 +1,47 @@
-# Base image
-FROM python:3.11-slim
+FROM python:3.11-slim AS builder
 
-
-# Create a non-root user for security
-RUN useradd -m appuser
-
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies required for building Python packages and PostgreSQL client
+# Install build tools and git for cloning dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    gcc \
-    build-essential \
-    dnsutils \
-    libpq-dev \
-    postgresql-client \
-    xmlsec1 \
-    git \
-    uuid-runtime \
-    libcurl4-openssl-dev && \
-    apt-get clean && \
+      build-essential \
+      libpq-dev \
+      git && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy only requirements first to leverage Docker layer caching
+WORKDIR /usr/src/app
+
+# Copy requirements and build wheels
 COPY requirements.txt .
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# ─────────────────────────────────────────────
 
-# Copy app source code
+FROM python:3.11-slim
+
+# Install runtime dependencies (including git for GitPython at runtime)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      libpq5 \
+      git && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/defectdojo
+
+# Install pre-built wheels from the builder stage
+COPY --from=builder /wheels /wheels
+RUN pip install --no-cache-dir /wheels/*
+
+# Copy application source code
 COPY . .
 
-EXPOSE 8080
+# Remove development-only local_settings to prevent tuple/list merge error
+RUN rm -f dojo/settings/local_settings.py
 
-# Run the Django app with Gunicorn using WSGI entry point
-CMD ["gunicorn", "dojo.wsgi:application", "--bind", "0.0.0.0:8080"]
+# Use production Django settings module
+ENV DJANGO_SETTINGS_MODULE=dojo.settings.settings
+
+# Expose the port uWSGI listens on
+EXPOSE 8000
+
+# Launch uWSGI via uwsgi.ini configuration
+CMD ["uwsgi", "--ini", "uwsgi.ini"]

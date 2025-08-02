@@ -1215,18 +1215,29 @@ CELERY_BEAT_SCHEDULE = {
 # address issue when running ./manage.py collectstatic
 # reference: https://github.com/korfuri/django-prometheus/issues/34
 PROMETHEUS_EXPORT_MIGRATIONS = False
+
 # django metrics for monitoring
 if env("DD_DJANGO_METRICS_ENABLED"):
     DJANGO_METRICS_ENABLED = env("DD_DJANGO_METRICS_ENABLED")
     INSTALLED_APPS = (*INSTALLED_APPS, "django_prometheus")
+
+    from dojo.settings.settings_dist import *
+
     MIDDLEWARE = [
+        "django.middleware.security.SecurityMiddleware",
+        "django.contrib.sessions.middleware.SessionMiddleware",
+        "django.middleware.common.CommonMiddleware",
+        "django.middleware.csrf.CsrfViewMiddleware",
+        "django.contrib.auth.middleware.AuthenticationMiddleware",
+        "django.contrib.messages.middleware.MessageMiddleware",  # ✅ Needed!
+        "django.middleware.clickjacking.XFrameOptionsMiddleware",
         "django_prometheus.middleware.PrometheusBeforeMiddleware",
-        *MIDDLEWARE,
         "django_prometheus.middleware.PrometheusAfterMiddleware",
-]
+    ]
+
     database_engine = DATABASES.get("default").get("ENGINE")
     DATABASES["default"]["ENGINE"] = database_engine.replace("django.", "django_prometheus.", 1)
-    # CELERY_RESULT_BACKEND.replace('django.core','django_prometheus.', 1)
+
     LOGIN_EXEMPT_URLS += (rf"^{URL_PREFIX}django_metrics/",)
 
 
